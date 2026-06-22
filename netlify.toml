@@ -1,0 +1,14 @@
+# Netlify configuration for the Cary Prosthodontics odontogram app
+# Static single-file site (no build step) + one serverless function (the AI key proxy).
+
+[build]
+  # No build command — index.html is served as-is.
+  publish = "."
+  functions = "netlify/functions"
+
+# Optional: send all unknown paths to index.html (keeps the single-page app loading)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  # The function route is matched before this, so /.netlify/functions/* still works.
