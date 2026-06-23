@@ -420,6 +420,27 @@
   .tx-tooth.tx-partial{background:#fff6e0;outline:2px solid #e2b955}
   .tx-tooth.tx-alldone{background:var(--brand-green-soft);outline:2px solid var(--brand-green)}
   .tx-tcount.all{background:var(--brand-green)}
+  .tx-matbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;padding:10px;background:#f3eefa;border:1px solid #d8cce8;border-radius:10px}
+  .tx-scanbtn{display:inline-block;background:var(--brand-blue);color:#fff;padding:9px 16px;border-radius:9px;font-weight:700;cursor:pointer;font-size:14px}
+  .tx-matlist{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+  .tx-matcard{border:1px solid var(--line);border-radius:11px;padding:10px;background:#fff}
+  .tx-matcard.verified{background:var(--brand-green-soft);border-color:#bcd9a8}
+  .tx-matrow{display:flex;gap:10px}
+  .tx-matphoto{width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer;flex:0 0 auto}
+  .tx-matfields{flex:1;min-width:0}
+  .tx-mat-reading{font-size:12px;color:var(--brand-blue);font-weight:700;margin-bottom:4px}
+  .tx-mfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px}
+  .tx-mflab{display:flex;flex-direction:column;font-size:10.5px;font-weight:700;color:var(--muted);gap:2px;text-transform:uppercase;letter-spacing:.02em}
+  .tx-mflab.inline{text-transform:none}
+  .tx-mflab input,.tx-mflab select{padding:5px 7px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:13px;font-weight:400;color:var(--ink);text-transform:none}
+  .tx-mflab input:disabled,.tx-mflab select:disabled{background:#eef3ee;color:#4a5a4a}
+  .tx-matmeta{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+  .tx-matverify{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+  .tx-vname{padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px}
+  .tx-vbtn{background:var(--brand-green);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px}
+  .tx-verified-badge{color:#2e6b14;font-weight:700;font-size:13px}
+  .tx-unverify,.tx-matdel{background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px}
+  .tx-matdel{color:#b02828;margin-left:auto}
   .apikey-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px}
   .apikey-box{background:#fff;border-radius:14px;padding:22px;max-width:520px;width:100%;box-shadow:0 12px 48px rgba(0,0,0,.3);font-family:inherit}
   .apikey-box h3{margin:0 0 8px;color:var(--ink)}
@@ -1145,6 +1166,17 @@ let planBridgeAnchor=null, planBridgeHover=null; // bridge span drag state
 // txToday[n] = { procs:[ {id, type, details:{...}} ] }  per-tooth list of procedures done today
 const txToday={}; for(let n=1;n<=32;n++) txToday[n]={procs:[]};
 const txArchProcs=[];   // arch/quadrant/visit-level procedures not tied to one tooth [{id,type,scope,details}]
+// Implantable materials captured this visit (assistant scans packaging; flows into the note).
+const txMaterials=[]; let txMaterialId=1;
+const TX_MAT_FIELDS=[
+  {k:'manufacturer',label:'Manufacturer'},
+  {k:'ref',label:'Catalog / Ref #'},
+  {k:'lot',label:'Lot #'},
+  {k:'serial',label:'Serial #'},
+  {k:'expiration',label:'Expiration'},
+  {k:'size',label:'Size / dimensions'},
+  {k:'udi',label:'UDI'},
+];
 let txProcId=1;
 let txVisitDate=''; // ISO date of the visit (defaults to today)
 let txGlobal={ anesthetics:[], isolation:'', postop:[], addendum:'' }; // visit-level shared fields (anesthetics structured; postop = chosen chips)
@@ -4917,7 +4949,7 @@ async function claudeAPI(body, opts){
   return data;
 }
 var autosaveTimer=null;
-function snapshot(){ return JSON.stringify({teeth,prostheses,bars,barId,diagnoses,limitedExam,examMode,activeDiscipline,disciplineData,rid,pid,records,ledger,ledgerId,history,historyId,planTeeth,planProstheses,planProsthId,planAlveo:[...planAlveo],planImplantSpec,planBridges,planBridgeId,tpPlans,tpAcceptedIndex,tpAgreement,tpView,tpDirectives,tpConstraints,documents,documentId,photos,photoId,radiographs,radiographId,txToday,txArchProcs,txProcId,txVisitDate,txGlobal},null,0); }
+function snapshot(){ return JSON.stringify({teeth,prostheses,bars,barId,diagnoses,limitedExam,examMode,activeDiscipline,disciplineData,rid,pid,records,ledger,ledgerId,history,historyId,planTeeth,planProstheses,planProsthId,planAlveo:[...planAlveo],planImplantSpec,planBridges,planBridgeId,tpPlans,tpAcceptedIndex,tpAgreement,tpView,tpDirectives,tpConstraints,documents,documentId,photos,photoId,radiographs,radiographId,txToday,txArchProcs,txProcId,txVisitDate,txGlobal,txMaterials,txMaterialId},null,0); }
 function restore(json){
   try{
     const d=JSON.parse(json);
@@ -4959,6 +4991,8 @@ function restore(json){
     if(d.txToday && typeof d.txToday==='object'){ for(let n=1;n<=32;n++){ txToday[n]= (d.txToday[n] && Array.isArray(d.txToday[n].procs)) ? d.txToday[n] : {procs:[]}; } }
     else { for(let n=1;n<=32;n++) txToday[n]={procs:[]}; }
     txArchProcs.length=0; if(Array.isArray(d.txArchProcs)) d.txArchProcs.forEach(p=>txArchProcs.push(p));
+    txMaterials.length=0; if(Array.isArray(d.txMaterials)) d.txMaterials.forEach(m=>txMaterials.push(m));
+    txMaterialId = (typeof d.txMaterialId==='number') ? d.txMaterialId : (txMaterials.reduce((m,x)=>Math.max(m,x.id||0),0)+1);
     txProcId = (typeof d.txProcId==='number') ? d.txProcId : 1;
     txVisitDate = d.txVisitDate || '';
     txGlobal = (d.txGlobal && typeof d.txGlobal==='object') ? d.txGlobal : {anesthetics:[],isolation:'',postop:[],addendum:''};
@@ -5075,6 +5109,12 @@ function resetAllData(){
   if(typeof documents!=='undefined'){ documents=[]; documentId=1; }
   if(typeof photos!=='undefined'){ photos=[]; photoId=1; }
   if(typeof radiographs!=='undefined'){ radiographs=[]; radiographId=1; }
+  if(typeof txToday==='object'){ for(let n=1;n<=32;n++) txToday[n]={procs:[]}; }
+  if(typeof txArchProcs!=='undefined'){ txArchProcs.length=0; }
+  if(typeof txMaterials!=='undefined'){ txMaterials.length=0; txMaterialId=1; }
+  if(typeof txProcId!=='undefined'){ txProcId=1; }
+  if(typeof txVisitDate!=='undefined'){ txVisitDate=''; }
+  if(typeof txGlobal!=='undefined'){ txGlobal={anesthetics:[],isolation:'',postop:[],addendum:''}; }
   if(typeof tpAcceptedIndex!=='undefined'){ tpAcceptedIndex=null; }
   if(typeof tpAgreement!=='undefined'){ tpAgreement=null; }
   if(typeof tpDirectives!=='undefined'){ tpDirectives=[]; }
@@ -5745,6 +5785,81 @@ function le(field,val){ limitedExam[field]=val; saveLocal(false); }
 // ============ TREATMENT TODAY (operative note builder) ============
 function txTodayDate(){ if(!txVisitDate){ const d=new Date(); txVisitDate=d.toISOString().slice(0,10); } return txVisitDate; }
 function txProcCount(){ let c=txArchProcs.length; for(let n=1;n<=32;n++) c+=txToday[n].procs.length; return c; }
+// ===== Implantable materials capture (photo + AI extraction + mandatory verify) =====
+async function txScanMaterial(input){
+  const file=input.files && input.files[0]; if(!file){ return; }
+  input.value='';
+  let dataUrl;
+  try{ dataUrl=await compressImage(file, 1700, 0.8); }catch(e){ saveStatus('Could not read photo.'); return; }
+  // create the material immediately with the photo, so it's retained even if AI fails
+  const mat={ id:txMaterialId++, photo:dataUrl, fields:{manufacturer:'',ref:'',lot:'',serial:'',expiration:'',size:'',udi:''}, site:'', verified:false, scannedBy:'', verifiedBy:'', ts:nowStamp(), _extracting:true };
+  txMaterials.push(mat);
+  renderTxMaterialsInPlace();
+  // send to AI for extraction
+  try{
+    const b64=dataUrl.split(',')[1];
+    const system=`You read dental/medical device packaging labels and extract traceability data. Return ONLY a JSON object, no markdown, with exactly these keys: manufacturer, ref, lot, serial, expiration, size, udi. Use the value printed on the label. For any field not visibly present, use an empty string "". Do NOT guess or infer values you cannot read — an empty string is correct when unsure. "ref" = catalog/reference/REF number. "lot" = lot/LOT/batch number. "expiration" = expiry/use-by date as printed. "size" = dimensions (e.g. 4.0 x 10 mm, 0.5cc, 15x20mm). "udi" = the UDI / GTIN / (01)... string if present.`;
+    const content=[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:'Extract the label fields as JSON.'}];
+    const data=await claudeAPI({model:'claude-sonnet-4-6',max_tokens:600,temperature:0,system,messages:[{role:'user',content}]});
+    let raw=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim().replace(/```json/gi,'').replace(/```/g,'').trim();
+    const obj=JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}')+1));
+    TX_MAT_FIELDS.forEach(f=>{ if(typeof obj[f.k]==='string') mat.fields[f.k]=obj[f.k]; });
+  }catch(e){ /* extraction failed — fields stay blank for manual entry */ }
+  mat._extracting=false;
+  saveLocal(false);
+  renderTxMaterialsInPlace();
+}
+function renderTxMaterialsInPlace(){ const h=document.getElementById('tx-materials'); if(h) h.innerHTML=renderTxMaterials(); }
+function renderTxMaterials(){
+  if(!txMaterials.length) return '';
+  return `<div class="tx-matlist">`+txMaterials.map(m=>{
+    const fields=TX_MAT_FIELDS.map(f=>`<label class="tx-mflab"><span>${f.label}</span><input type="text" value="${escapeHtml(m.fields[f.k]||'')}" placeholder="${m._extracting?'reading…':'—'}" oninput="txMatField(${m.id},'${f.k}',this.value)" ${m.verified?'disabled':''}></label>`).join('');
+    const siteOpts=['<option value="">visit-level</option>'].concat(Array.from({length:32},(_,i)=>i+1).map(n=>`<option value="${n}" ${String(m.site)===String(n)?'selected':''}>#${n}</option>`)).join('');
+    return `<div class="tx-matcard ${m.verified?'verified':''}">
+      <div class="tx-matrow">
+        <img class="tx-matphoto" src="${m.photo}" alt="label" onclick="txViewMatPhoto(${m.id})">
+        <div class="tx-matfields">
+          ${m._extracting?'<div class="tx-mat-reading">📷 Reading label…</div>':''}
+          <div class="tx-mfgrid">${fields}</div>
+          <div class="tx-matmeta">
+            <label class="tx-mflab inline"><span>Site</span><select onchange="txMatSite(${m.id},this.value)" ${m.verified?'disabled':''}>${siteOpts}</select></label>
+            <label class="tx-mflab inline"><span>Scanned by</span><input type="text" value="${escapeHtml(m.scannedBy||'')}" placeholder="assistant" oninput="txMatAttr(${m.id},'scannedBy',this.value)" ${m.verified?'disabled':''}></label>
+          </div>
+        </div>
+      </div>
+      <div class="tx-matverify">
+        ${m.verified
+          ? `<span class="tx-verified-badge">✓ Verified by ${escapeHtml(m.verifiedBy||'clinician')}</span> <button class="tx-unverify" onclick="txUnverifyMat(${m.id})">edit</button>`
+          : `<label class="tx-vchk"><input type="text" class="tx-vname" placeholder="verifier name (Dr.)" value="${escapeHtml(m.verifiedBy||'')}" oninput="txMatAttr(${m.id},'verifiedBy',this.value)"></label>
+             <button class="tx-vbtn" onclick="txVerifyMat(${m.id})">✓ I verified these against the package</button>`}
+        <button class="tx-matdel" onclick="txDelMat(${m.id})">remove</button>
+      </div>
+    </div>`;
+  }).join('')+`</div>`;
+}
+function txMatField(id,k,v){ const m=txMaterials.find(x=>x.id===id); if(m && !m.verified){ m.fields[k]=v; saveLocal(false); } }
+function txMatSite(id,v){ const m=txMaterials.find(x=>x.id===id); if(m && !m.verified){ m.site=v; saveLocal(false); } }
+function txMatAttr(id,k,v){ const m=txMaterials.find(x=>x.id===id); if(m){ m[k]=v; saveLocal(false); } }
+function txVerifyMat(id){
+  const m=txMaterials.find(x=>x.id===id); if(!m) return;
+  if(!m.verifiedBy || !m.verifiedBy.trim()){ saveStatus('Enter the verifier name before confirming.'); return; }
+  // require at least a lot or ref or udi present (something traceable)
+  if(!(m.fields.lot||m.fields.ref||m.fields.udi)){ saveStatus('Add at least a Lot #, Ref #, or UDI before verifying.'); return; }
+  m.verified=true; m.verifiedAt=nowStamp(); saveLocal(false); renderTxMaterialsInPlace();
+  saveStatus('Material verified.');
+}
+function txUnverifyMat(id){ const m=txMaterials.find(x=>x.id===id); if(m){ m.verified=false; saveLocal(false); renderTxMaterialsInPlace(); } }
+function txDelMat(id){ const i=txMaterials.findIndex(x=>x.id===id); if(i>=0){ txMaterials.splice(i,1); saveLocal(false); renderTxMaterialsInPlace(); } }
+function txViewMatPhoto(id){ const m=txMaterials.find(x=>x.id===id); if(!m)return; const w=window.open('','_blank'); if(w&&w.document){ w.document.write(`<img src="${m.photo}" style="max-width:100%">`); w.document.close(); } }
+function txMaterialsForNote(){
+  // structured lines for verified materials, grouped by site
+  return txMaterials.filter(m=>m.verified).map(m=>{
+    const bits=TX_MAT_FIELDS.map(f=>m.fields[f.k]?`${f.label}: ${m.fields[f.k]}`:null).filter(Boolean);
+    const where=m.site?`site #${m.site}`:'visit-level';
+    return `[${where}] ${bits.join('; ')}${m.verifiedBy?` (verified by ${m.verifiedBy})`:''}`;
+  });
+}
+function txUnverifiedCount(){ return txMaterials.filter(m=>!m.verified).length; }
 function renderTxToday(){
   const host=document.getElementById('txtoday-view'); if(!host) return;
   const hasPlan=txPlanHasAnyItems();
@@ -5783,6 +5898,14 @@ function renderTxToday(){
       <label class="tx-datelbl">Visit date <input type="date" id="tx-date" value="${txTodayDate()}" onchange="txSetDate(this.value)"></label>
     </div>
     <p class="le-hint">This shows your <b>sketched treatment plan</b>. Tap each planned item you completed today — its details (surfaces, material, implant spec) carry in automatically and you can edit them below. As items are completed, they update the live odontogram and drop off the plan.</p>
+
+    <div class="tx-matbar">
+      <label class="tx-scanbtn">📸 Scan implantable
+        <input type="file" accept="image/*" capture="environment" style="display:none" onchange="txScanMaterial(this)">
+      </label>
+      <span class="le-hint">Assistant can scan bone graft, membrane, implant, or abutment packaging. Lot/Ref/UDI are read from the label and must be verified.${txMaterials.length?` <b>${txMaterials.filter(m=>m.verified).length}/${txMaterials.length} verified.</b>`:''}</span>
+    </div>
+    <div id="tx-materials">${renderTxMaterials()}</div>
 
     <div class="tx-chart-host" id="tx-chart-host"></div>
 
@@ -6082,12 +6205,19 @@ function buildTxTodaySummary(){
   };
   for(let n=1;n<=32;n++){ (txToday[n].procs||[]).forEach(p=>{ const l=procLine('tooth',n,p); if(l)lines.push(l); }); }
   txArchProcs.forEach(p=>{ const l=procLine('arch',0,p); if(l)lines.push(l); });
+  const mats=txMaterialsForNote();
+  if(mats.length){ lines.push(''); lines.push('IMPLANTABLE MATERIALS (verified — include lot/ref/UDI in the note, placed at the stated site):'); mats.forEach(m=>lines.push('  '+m)); }
   if(g.postop && g.postop.length) lines.push(`Post-op instructions: ${g.postop.join('; ')}`);
   if(g.addendum) lines.push(`Additional (verbatim): ${g.addendum}`);
   return lines.join('\n');
 }
 async function generateTxTodayNote(){
   if(txProcCount()===0){ const s=document.getElementById('tx-status'); if(s)s.textContent='Add at least one procedure first.'; return; }
+  const unver=txUnverifiedCount();
+  if(unver>0){
+    const ok=confirm(`${unver} scanned material${unver>1?'s are':' is'} not yet verified against the package. Unverified materials will NOT be included in the note. Continue anyway?`);
+    if(!ok){ const s=document.getElementById('tx-status'); if(s)s.textContent=`${unver} material(s) need verification before they appear in the note.`; return; }
+  }
   const btn=document.getElementById('tx-gen-btn'); if(btn)btn.disabled=true;
   const s=document.getElementById('tx-status'); if(s){s.textContent='Writing operative note…';s.className='ai-status busy';}
   const summary=buildTxTodaySummary();
@@ -6098,6 +6228,7 @@ STRICT RULES:
 - Organize as a clear operative note: a brief opening (date, anesthetic/isolation if provided), then each procedure by tooth in logical order, then post-op instructions if provided. Group related per-tooth steps naturally.
 - A resin/composite restoration is a DIRECT restoration; inlays, onlays, and crowns are indirect. Never hedge direct vs indirect.
 - For an implant, include system, dimensions, torque, stability, graft, and healing component only if provided.
+- IMPLANTABLE MATERIALS: when materials are listed, record each in the note with its manufacturer, lot #, ref/catalog #, expiration, size, and UDI exactly as given, placed within the procedure at its stated site (e.g. graft and membrane at site #18 appear in the #18 surgical paragraph). Materials marked visit-level go in a brief materials line. Reproduce lot/ref/UDI characters EXACTLY — never alter, abbreviate, or correct them.
 - For a root canal marked "Started — not completed", document only through the point reached, state it was not obturated, note the intracanal medicament and temporization, and do not describe completion/obturation.
 - Never include dollar amounts or fees.
 - End with: "DRAFT — clinician to review and sign before entry into the record."`;
