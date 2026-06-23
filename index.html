@@ -4504,7 +4504,8 @@ function drawModal(n){
     const el=document.elementFromPoint(x,y);
     return el&&el.classList.contains('surf')?el.dataset.s:null;
   };
-  let dragging=false;
+  let dragging=false, moved=false, downSurf=null, suppressClick=false, downX=0, downY=0;
+  const ptXY=(evt)=>{ const t=evt.touches?evt.touches[0]:evt; return [t.clientX,t.clientY]; };
   const refreshPendingVisual=()=>{
     // update only the highlight of pending surfaces + the pending bar — do NOT rebuild the svg
     svg.querySelectorAll('.surf').forEach(p=>{
@@ -4515,16 +4516,44 @@ function drawModal(n){
   };
   const start=(e)=>{
     if(stage==='caries'){ const s=getSurf(e); if(s)toggleCaries(n,s); return; }
-    dragging=true; pending=[]; const s=getSurf(e); if(s)pending.push(s);
+    dragging=true; moved=false; downSurf=getSurf(e);
+    [downX,downY]=ptXY(e);
+    e.preventDefault();
+    // don't mutate pending yet — wait to see if this is a tap (toggle) or a drag (multi-select)
+  };
+  const move=(e)=>{
+    if(!dragging)return;
+    const [x,y]=ptXY(e);
+    // only treat as a drag once the pointer travels past a small threshold (ignores finger jitter)
+    if(!moved && Math.hypot(x-downX,y-downY) < 12){ e.preventDefault(); return; }
+    const s=getSurf(e);
+    if(s){
+      if(!moved){
+        moved=true; suppressClick=true; pending=[];
+        if(downSurf) pending.push(downSurf);
+      }
+      if(!pending.includes(s)) pending.push(s);
+    }
     e.preventDefault(); refreshPendingVisual();
   };
-  const move=(e)=>{ if(!dragging)return; const s=getSurf(e); if(s&&!pending.includes(s))pending.push(s); e.preventDefault(); refreshPendingVisual(); };
-  const end=()=>{ if(!dragging)return; dragging=false; refreshPendingVisual(); };
+  const end=(e)=>{
+    if(!dragging)return;
+    dragging=false;
+    if(moved){ refreshPendingVisual(); }
+    else if(downSurf && e && e.type==='touchend'){
+      // touchend often doesn't emit a synthetic click on SVG children — toggle here for touch taps
+      const i=pending.indexOf(downSurf);
+      if(i>=0)pending.splice(i,1); else pending.push(downSurf);
+      suppressClick=true; // guard against a late synthetic click double-toggling
+      refreshPendingVisual();
+    }
+  };
   svg.addEventListener('mousedown',start);svg.addEventListener('mousemove',move);window.addEventListener('mouseup',end);
   svg.addEventListener('touchstart',start,{passive:false});svg.addEventListener('touchmove',move,{passive:false});window.addEventListener('touchend',end);
-  // also allow simple tap on a surface to add/remove it from pending (accessibility / precision)
+  // mouse/keyboard click toggles just that surface (precise single-surface selection)
   svg.querySelectorAll('.surf').forEach(p=>{
     p.addEventListener('click',()=>{
+      if(suppressClick){ suppressClick=false; return; }   // ignore the click that ends a drag or a handled touch tap
       if(stage==='caries'){ toggleCaries(n,p.dataset.s); return; }
       const s=p.dataset.s, i=pending.indexOf(s);
       if(i>=0)pending.splice(i,1); else pending.push(s);
@@ -6374,7 +6403,8 @@ STANDARD IMPLANT POSITIONS (this office's convention) — when an option places 
   • Tissue-supported Locator overdenture — Maxilla: 4, 7, 10, 13 (four implants); Mandible: 19, 22, 27, 30 (four implants).
 Put the specific tooth number in the "tooth" field of each implant/abutment line (do not write "1-16" or leave it blank for implant placement).
 ARCH TERMINOLOGY — use these words precisely. "Maxillary" = upper arch (teeth 1–16); "Mandibular" = lower arch (17–32). When BOTH arches are treated, say "dual arch" or "maxillary and mandibular" — NEVER "bilateral", which refers to the left and right sides of a SINGLE arch, not to both arches. Reserve "bilateral" for left/right within one arch (e.g. bilateral posterior). Do not append "Full Arch Bilateral" or similar to option names; if both arches are involved say "(dual arch)".`;
-  const sketch=window.__planSketch||'';
+  const sketch=window.__planSketch || (typeof planSketchSummary==='function' ? planSketchSummary() : '') || '';
+  if(sketch){ aiStatus('Generating from your sketched plan…',true); }
   const sketchBlock = sketch
     ? `\n\nDOCTOR'S PROPOSED TREATMENT (sketched on the odontogram — this is the doctor's intended plan; itemize and SEQUENCE exactly this, adding the necessary supporting procedures like impressions, CBCT, abutments, provisionals, and delivery. Do NOT substitute a different modality):\n${sketch}\n\nCRITICAL: Place implants ONLY at the EXACT tooth positions listed in the sketch above. Do NOT apply any "standard implant position" template and do NOT add implants at positions the doctor did not sketch. The sketched positions are final. If the sketch lists "REQUIRED SUPPORTING PROCEDURES", you MUST include each as its own itemized fee line (ridge-preservation graft and membrane at each extraction+implant site, and an interim partial denture for each involved arch). Produce ONLY ONE option (the doctor's proposed plan) — do not invent alternatives — unless the sketch is ambiguous.`
     : '';
